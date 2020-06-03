@@ -51,6 +51,8 @@ pub const Cpu = struct {
     /// generates random numbers for our opcode at 0xC000
     random: std.rand.DefaultPrng,
 
+    /// Creates a new Cpu while setting the default fields
+    /// `delay` sets the `delay_timer` field if not null, else 0.
     pub fn init(delay: ?u8) Cpu {
         // seed for our random bytes
         const seed = @intCast(u64, std.time.milliTimestamp());
@@ -76,9 +78,9 @@ pub const Cpu = struct {
         return cpu;
     }
 
-    /// Loads a ROM file's data and then loads it into the CPU's memory
-    /// The memory allocated by this is owned by the caller
-    pub fn loadRom(self: *Cpu, allocator: *std.mem.Allocator, file_path: []const u8) !void {
+    /// Utility function that loads a ROM file's data and then loads it into the CPU's memory
+    /// The memory allocated and returned by this is owned by the caller
+    pub fn loadRom(self: *Cpu, allocator: *std.mem.Allocator, file_path: []const u8) ![]u8 {
         var file: std.fs.File = try std.fs.cwd().openFile(file_path, .{});
         defer file.close();
 
@@ -88,6 +90,8 @@ pub const Cpu = struct {
         _ = try file.read(buffer);
 
         self.loadBytes(buffer);
+
+        return buffer;
     }
 
     /// Loads data into the CPU's memory
@@ -121,8 +125,8 @@ pub const Cpu = struct {
 
     /// Executes the given opcode
     pub fn dispatch(self: *Cpu, opcode: u16) !void {
+        // increase program counter for each dispatch
         self.pc += 2;
-
         switch (opcode & 0xF000) {
             0x0000 => switch (opcode) {
                 0x00E0 => {
@@ -140,20 +144,27 @@ pub const Cpu = struct {
             0x1000 => self.pc = opcode & 0x0FFF,
             0x2000 => {
                 self.stack[self.sp] = self.pc;
-                self.sp -= 1;
+                self.sp += 1;
                 self.pc = opcode & 0x0FFF;
             },
             // skip the following instructions if vx and kk are equal
-            0x3000, 0x4000 => {
+            0x3000 => {
                 const vx = (opcode & 0x0F00) >> 8;
                 const kk = opcode & 0x00FF;
                 if (self.registers[vx] == kk) {
                     self.pc += 2;
                 }
             },
+            0x4000 => {
+                const vx = (opcode & 0x0F00) >> 8;
+                const kk = opcode & 0x00FF;
+                if (self.registers[vx] != kk) {
+                    self.pc += 2;
+                }
+            },
             0x5000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const vy = (opcode & 0x0F00) >> 4;
+                const vy = (opcode & 0x00F0) >> 4;
                 if (self.registers[vx] == vy) {
                     self.pc += 2;
                 }
@@ -170,21 +181,29 @@ pub const Cpu = struct {
             },
             0x8000 => {
                 const x = (opcode & 0x0F00) >> 8;
-                const y = @truncate(u8, (opcode & 0x0F00) >> 4);
+                const y = @truncate(u8, (opcode & 0x00F0) >> 4);
 
                 switch (opcode & 0x000F) {
-                    0x0000 => self.registers[x] = y,
-                    0x0001 => self.registers[x] |= y,
-                    0x0002 => self.registers[x] &= y,
-                    0x0003 => self.registers[x] ^= y,
+                    0x0000 => self.registers[x] = self.registers[y],
+                    0x0001 => self.registers[x] |= self.registers[y],
+                    0x0002 => self.registers[x] &= self.registers[y],
+                    0x0003 => self.registers[x] ^= self.registers[y],
                     0x0004 => {
-                        const sum = self.registers[x] + self.registers[y];
+                        const sum = @as(u16, self.registers[x]) + self.registers[y];
                         self.registers[0xF] = if (sum > 255) 1 else 0;
                         self.registers[x] = @truncate(u8, sum);
                     },
                     0x0005 => {
                         self.registers[0xF] = if (self.registers[x] > self.registers[y]) 1 else 0;
-                        self.registers[x] -= self.registers[y];
+                        // check for overflow, we keep the lowest bits so incase of
+                        // overflow, return max u8 instead of the overflow bits
+                        var result: u8 = undefined;
+                        self.registers[x] = if (@subWithOverflow(
+                            u8,
+                            self.registers[x],
+                            self.registers[y],
+                            &result,
+                        )) 255 else result;
                     },
                     0x0006 => {
                         self.registers[0xF] = (self.registers[x] & 0x1);
@@ -192,7 +211,15 @@ pub const Cpu = struct {
                     },
                     0x0007 => {
                         self.registers[0xF] = if (self.registers[y] > self.registers[x]) 1 else 0;
-                        self.registers[x] = self.registers[y] - self.registers[x];
+                        // check for overflow, we keep the lowest bits so incase of
+                        // overflow, return max u8 instead of the overflow bits
+                        var result: u8 = undefined;
+                        self.registers[x] = if (@subWithOverflow(
+                            u8,
+                            self.registers[y],
+                            self.registers[x],
+                            &result,
+                        )) 255 else result;
                     },
                     0x000E => {
                         self.registers[0xF] = (self.registers[x] & 0x80) >> 7;
@@ -335,4 +362,197 @@ test "Cycle" {
     // program counter moves 2 per cycle (except for some opcode conditions where it skips)
     std.testing.expect(cpu.pc == 0x202);
     std.testing.expect(opcode == 0xA100);
+}
+
+test "Expect Unknown Opcode" {
+    var cpu = Cpu.init(null);
+    std.testing.expectError(error.UnknownOpcode, cpu.dispatch(0x1));
+}
+
+test "All opcodes" {
+    // Not the cleanest tests but gets the job done for now
+
+    // 2nnn - CALL addr
+    var cpu = Cpu.init(null);
+    try cpu.dispatch(0x2100);
+    std.testing.expectEqual(cpu.pc, 0x100);
+    std.testing.expectEqual(cpu.sp, 0x1);
+    std.testing.expectEqual(cpu.stack[0], 0x202);
+
+    // 3xkk - SE Vx, byte
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0x3123);
+    std.testing.expectEqual(cpu.pc, 0x202);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    try cpu.dispatch(0x3103);
+    std.testing.expectEqual(cpu.pc, 0x204);
+
+    // 4xkk - SNE Vx, byte
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0x4123);
+    std.testing.expectEqual(cpu.pc, 0x204);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    try cpu.dispatch(0x4103);
+    std.testing.expectEqual(cpu.pc, 0x202);
+
+    // 5xy0 - SE Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    cpu.registers[2] = 0x04;
+    try cpu.dispatch(0x5120);
+    std.testing.expectEqual(cpu.pc, 0x202);
+
+    // 6xkk - LD Vx, byte
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0x6102);
+    std.testing.expectEqual(cpu.registers[1], 0x02);
+
+    // 7xkk - ADD Vx,
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0x7102);
+    std.testing.expectEqual(cpu.registers[1], 0x02);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    try cpu.dispatch(0x7102);
+    std.testing.expectEqual(cpu.registers[1], 0x03);
+
+    // 8xy0 - LD Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x8120);
+    std.testing.expectEqual(cpu.registers[1], 0x01);
+
+    // 8xy1 - OR Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x10;
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x8121);
+    std.testing.expectEqual(cpu.registers[1], 0x11);
+
+    // 8xy2 - AND Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x10;
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x8122);
+    std.testing.expectEqual(cpu.registers[1], 0x00);
+
+    // 8xy3 - XOR Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x8123);
+    std.testing.expectEqual(cpu.registers[1], 0x00);
+
+    // 8xy4 - ADD Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x8124);
+    std.testing.expectEqual(cpu.registers[1], 0x2);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0xFF;
+    cpu.registers[2] = 0x03;
+    try cpu.dispatch(0x8124);
+    std.testing.expectEqual(cpu.registers[1], 0x2);
+    std.testing.expectEqual(cpu.registers[0xF], 0x1);
+
+    // 8xy5 - SUB Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0xFF;
+    cpu.registers[2] = 0x03;
+    try cpu.dispatch(0x8125);
+    std.testing.expectEqual(cpu.registers[1], 0xFC);
+    std.testing.expectEqual(cpu.registers[0xF], 0x1);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x02;
+    cpu.registers[2] = 0x03;
+    try cpu.dispatch(0x8125);
+    std.testing.expectEqual(cpu.registers[1], 0xFF);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    // 8xy6 - SHR Vx {, Vy}
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    try cpu.dispatch(0x8126);
+    std.testing.expectEqual(cpu.registers[1], 0x1);
+    std.testing.expectEqual(cpu.registers[0xF], 0x1);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x02;
+    try cpu.dispatch(0x8126);
+    std.testing.expectEqual(cpu.registers[1], 0x1);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    // 8xy7 - SUBN Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    cpu.registers[2] = 0xFF;
+    try cpu.dispatch(0x8127);
+    std.testing.expectEqual(cpu.registers[1], 0xFC);
+    std.testing.expectEqual(cpu.registers[0xF], 0x1);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x03;
+    cpu.registers[2] = 0x02;
+    try cpu.dispatch(0x8127);
+    std.testing.expectEqual(cpu.registers[1], 0xFF);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    // 8xyE - SHL Vx {, Vy}
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    try cpu.dispatch(0x812E);
+    std.testing.expectEqual(cpu.registers[1], 0x2);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x81;
+    try cpu.dispatch(0x812E);
+    std.testing.expectEqual(cpu.registers[1], 0x2);
+    std.testing.expectEqual(cpu.registers[0xF], 0x1);
+
+    // 9xy0 - SNE Vx, Vy
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    cpu.registers[2] = 0x02;
+    try cpu.dispatch(0x9120);
+    std.testing.expectEqual(cpu.pc, 0x204);
+
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x01;
+    cpu.registers[2] = 0x01;
+    try cpu.dispatch(0x9120);
+    std.testing.expectEqual(cpu.pc, 0x202);
+
+    // Annn - LD I, addr
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0xA100);
+    std.testing.expectEqual(cpu.index_register, 0x100);
+
+    // Bnnn - JP V0, addr
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0xB210);
+    std.testing.expectEqual(cpu.pc, 0x210);
+
+    cpu = Cpu.init(null);
+    cpu.registers[0] = 0x01;
+    try cpu.dispatch(0xB210);
+    std.testing.expectEqual(cpu.pc, 0x211);
+
+    // Cxkk - RND Vx, byte
+    // TODO: implement a way to inject the random position to opcode
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0xC110);
+    std.testing.expectEqual(cpu.pc, 0x202);
+
+    // Dxyn - DRW Vx, Vy, nibble
+    // TODO: Implement and test video output
 }
