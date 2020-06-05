@@ -249,25 +249,31 @@ pub const Cpu = struct {
                 // Display n-byte sprite starting at memory location I at (Vx, Vy),
                 // set VF = collision
 
-                //TODO Finish this opcode
-
                 // Apply wrapping if going beyond screen boundaries
                 const x = self.registers[(opcode & 0x0F00) >> 8] % width;
-                const y = self.registers[(opcode & 0x00FF) >> 4] % height;
+                const y = self.registers[(opcode & 0x00F0) >> 4] % height;
                 const n = opcode & 0x000F;
 
-                self.registers[0xF] = 0;
+                self.registers[0xF] = 0x0;
                 var row: usize = 0;
-                comptime var col: usize = 0;
                 while (row < n) : (row += 1) {
                     const sprite_byte: u8 = self.memory[self.index_register + row];
 
+                    var col: u4 = 0;
                     while (col < 8) : (col += 1) {
-                        const sprite_pixel: u8 = sprite_byte & (0x80 >> col);
+                        // LFH must be fixed-width, so coerce into u16,
+                        // then truncate into u8 after bitshift
+                        const sprite_pixel = sprite_byte & (@as(u16, 0x80) >> col);
                         var screen_pixel = &self.video[(y + row) * width + (x + col)];
 
                         // Sprite pixel is on
-                        if (sprite_pixel == 1) {}
+                        if (sprite_pixel == 0x01) {
+                            // screen pixel is also on
+                            if (screen_pixel.* == 0x01) {
+                                self.registers[0xF] = 0x01;
+                            }
+                            screen_pixel.* ^= 0x01;
+                        }
                     }
                 }
             },
@@ -314,13 +320,13 @@ pub const Cpu = struct {
                     },
                     0x55 => {
                         var i: u16 = 0;
-                        while (i < x) : (i += 1) {
+                        while (i <= x) : (i += 1) {
                             self.memory[self.index_register + i] = self.registers[i];
                         }
                     },
                     0x65 => {
                         var i: u8 = 0;
-                        while (i < x) : (i += 1) {
+                        while (i <= x) : (i += 1) {
                             self.registers[i] = self.memory[self.index_register + i];
                         }
                     },
@@ -555,4 +561,98 @@ test "All opcodes" {
 
     // Dxyn - DRW Vx, Vy, nibble
     // TODO: Implement and test video output
+    cpu = Cpu.init(null);
+    cpu.index_register = 0x200;
+    cpu.memory[0x200] = 0x01;
+    try cpu.dispatch(0xD001);
+    std.testing.expectEqual(cpu.video[0], 0x00);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    cpu = Cpu.init(null);
+    cpu.index_register = 0x200;
+    cpu.memory[0x200] = 0x01;
+    cpu.video[0x0] = 0x01;
+    try cpu.dispatch(0xD001);
+    std.testing.expectEqual(cpu.video[0], 0x01);
+    std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    cpu = Cpu.init(null);
+    cpu.index_register = 0x0;
+    try cpu.dispatch(0xD005);
+    //std.testing.expectEqual(cpu.video[0], 0x01);
+    //std.testing.expectEqual(cpu.registers[0xF], 0x0);
+
+    // Ex9E - SKP Vx
+
+    // ExA1 - SKNP Vx
+
+    // Fx07 - LD Vx, DT
+    cpu = Cpu.init(0x01);
+    try cpu.dispatch(0xF107);
+    std.testing.expectEqual(cpu.registers[1], 0x01);
+
+    // Fx15 - LD DT, Vx
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x05;
+    try cpu.dispatch(0xF115);
+    std.testing.expectEqual(cpu.delay_timer, 0x05);
+
+    // Fx18 - LD ST, Vx
+    cpu = Cpu.init(null);
+    cpu.registers[1] = 0x05;
+    try cpu.dispatch(0xF118);
+    std.testing.expectEqual(cpu.sound_timer, 0x05);
+
+    // Fx29 - LD F, Vx
+    cpu = Cpu.init(null);
+    try cpu.dispatch(0xF029);
+    std.testing.expectEqual(cpu.index_register, 0x00);
+
+    cpu = Cpu.init(null);
+    cpu.registers[0x01] = 0x01;
+    try cpu.dispatch(0xF129);
+    std.testing.expectEqual(cpu.index_register, 0x05);
+
+    cpu = Cpu.init(null);
+    cpu.registers[0x02] = 0x02;
+    try cpu.dispatch(0xF229);
+    std.testing.expectEqual(cpu.index_register, 0x0A);
+
+    // Fx33 - LD B, Vx
+    cpu = Cpu.init(null);
+    cpu.registers[0] = 0xFF;
+    cpu.index_register = 0x200;
+    try cpu.dispatch(0xF033);
+    std.testing.expectEqual(cpu.memory[0x200], 0x02);
+    std.testing.expectEqual(cpu.memory[0x201], 0x05);
+    std.testing.expectEqual(cpu.memory[0x202], 0x05);
+
+    // Fx55 - LD [I], Vx
+    cpu = Cpu.init(null);
+    cpu.registers[0] = 0x03;
+    cpu.registers[1] = 0x02;
+    cpu.registers[2] = 0x01;
+    cpu.index_register = 0x220;
+    try cpu.dispatch(0xF255);
+    std.testing.expectEqual(cpu.memory[0x220], 0x03);
+    std.testing.expectEqual(cpu.memory[0x221], 0x02);
+    std.testing.expectEqual(cpu.memory[0x222], 0x01);
+
+    // Fx65 - LD Vx, [I]
+    cpu = Cpu.init(null);
+    cpu.memory[0x200] = 0x01;
+    cpu.memory[0x201] = 0x02;
+    cpu.index_register = 0x200;
+    try cpu.dispatch(0xF165);
+    std.testing.expectEqual(cpu.registers[0], 0x01);
+    std.testing.expectEqual(cpu.registers[1], 0x02);
+    std.testing.expectEqual(cpu.registers[2], 0x00);
+
+    cpu = Cpu.init(null);
+    cpu.memory[0x200] = 0x01;
+    cpu.memory[0x201] = 0x02;
+    cpu.index_register = 0x200;
+    try cpu.dispatch(0xF265);
+    std.testing.expectEqual(cpu.registers[0], 0x01);
+    std.testing.expectEqual(cpu.registers[1], 0x02);
 }
