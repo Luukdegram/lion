@@ -2,11 +2,17 @@ const std = @import("std");
 
 const Keypad = @import("keypad.zig").Keypad;
 
+/// The starting address in memory space,
+/// anything before this is storage and reserved memory
 const start_address = 0x200;
+/// Starting address of where the fonts are located in the memory
 const font_start_address = 0x50;
+/// Video height in pixels
 const height = 32;
+/// Video width in pixels
 const width = 64;
 
+/// The supported Font Set of 8Chip
 pub const font_set = &[_]u8{
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -26,6 +32,9 @@ pub const font_set = &[_]u8{
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 };
 
+/// Cpu is the 8Chip implementation, it contains the memory,
+/// opcodes and handles the cycle. Video output can be accessed
+/// directly, but is not thread-safe currently.
 pub const Cpu = struct {
     /// memory of the cpu, that is segmented into 3 parts:
     /// 1. 0x00-0x1FF reserved memory for interpreter
@@ -44,7 +53,7 @@ pub const Cpu = struct {
     sp: u8 = 0,
     /// Timer for delay, decrements until 0 and remains 0
     delay_timer: u8,
-    /// Timer used for emissing sound, decrements to 0. Anything non-zero emits a sound
+    /// Timer used for emitting sound, decrements to 0. Anything non-zero emits a sound
     sound_timer: u8,
     /// keypad input keys
     keypad: Keypad,
@@ -53,8 +62,12 @@ pub const Cpu = struct {
     /// generates random numbers for our opcode at 0xC000
     random: std.rand.DefaultPrng,
 
+    /// Currently the implementation allows to set the delay and sound timers
+    /// By default, both are set to 0.
     pub const Config = struct {
+        /// Delayer timer is decremented by 1 in each cpu cycle
         delay_timer: u8 = 0,
+        /// Sound timer which is decremented by 1 in each cpu cycle
         sound_timer: u8 = 0,
     };
 
@@ -101,14 +114,15 @@ pub const Cpu = struct {
         return buffer;
     }
 
-    /// Loads data into the CPU's memory
+    /// Loads data into the CPU's memory starting at `start_address` (0x200)
     pub fn loadBytes(self: *Cpu, data: []const u8) void {
         for (data) |b, i| {
             self.memory[start_address + i] = b;
         }
     }
 
-    /// Returns the next opcode
+    /// Returns the next opcode based on the memory's byte located at program counter
+    /// and program counter + 1
     pub fn fetchOpcode(self: Cpu) u16 {
         return @shlExact(@as(u16, self.memory[self.pc]), 8) | self.memory[self.pc + 1];
     }
