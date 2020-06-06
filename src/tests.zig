@@ -1,4 +1,6 @@
 const Cpu = @import("cpu.zig").Cpu;
+const Keypad = @import("keypad.zig").Keypad;
+
 usingnamespace @import("std").testing;
 
 test "Next opcode" {
@@ -36,6 +38,14 @@ test "Cycle" {
 test "Expect Unknown Opcode" {
     var cpu = Cpu.init(.{});
     expectError(error.UnknownOpcode, cpu.dispatch(0x1));
+}
+
+test "Key (un)pressed" {
+    var keypad = Keypad{};
+    keypad.pressKey(.Two);
+    expect(keypad.keys[0x1] == 0x1);
+    keypad.releaseKey(.Two);
+    expect(keypad.keys[0x1] == 0x0);
 }
 
 test "All opcodes" {

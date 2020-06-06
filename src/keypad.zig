@@ -12,12 +12,12 @@ pub const Keypad = struct {
         D = 0x7,
         Seven = 0x8,
         Eight = 0x9,
-        Nine = 0x10,
-        E = 0x11,
-        A = 0x12,
-        Zero = 0x13,
-        B = 0x14,
-        F = 0x15,
+        Nine = 0xa,
+        E = 0xb,
+        A = 0xc,
+        Zero = 0xd,
+        B = 0xe,
+        F = 0xf,
     };
 
     keys: [16]u1 = [_]u1{0} ** 16,
