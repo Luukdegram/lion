@@ -242,14 +242,14 @@ test "All opcodes" {
     // Ex9E - SKP Vx
     cpu = Cpu.init(.{});
     cpu.registers[0x01] = 0x02;
-    cpu.input_keys[0x02] = 0x1;
+    cpu.keypad.keys[0x02] = 0x1;
     try cpu.dispatch(0xE19E);
     expectEqual(cpu.pc, 0x204);
 
     // ExA1 - SKNP Vx
     cpu = Cpu.init(.{});
     cpu.registers[0x01] = 0x02;
-    cpu.input_keys[0x02] = 0x1;
+    cpu.keypad.keys[0x02] = 0x1;
     try cpu.dispatch(0xE1A1);
     expectEqual(cpu.pc, 0x202);
 

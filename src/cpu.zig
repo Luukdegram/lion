@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Keypad = @import("keypad.zig").Keypad;
+
 const start_address = 0x200;
 const font_start_address = 0x50;
 const height = 32;
@@ -45,7 +47,7 @@ pub const Cpu = struct {
     /// Timer used for emissing sound, decrements to 0. Anything non-zero emits a sound
     sound_timer: u8,
     /// keypad input keys
-    input_keys: [16]u1,
+    keypad: Keypad,
     /// The pixels to write a sprite to
     video: [width * height]u1,
     /// generates random numbers for our opcode at 0xC000
@@ -70,7 +72,7 @@ pub const Cpu = struct {
             .stack = [_]u16{0} ** 16,
             .delay_timer = config.delay_timer,
             .sound_timer = config.sound_timer,
-            .input_keys = [_]u1{0} ** 16,
+            .keypad = Keypad{},
             .video = [_]u1{0} ** width ** height,
             .random = std.rand.DefaultPrng.init(seed),
         };
@@ -288,13 +290,13 @@ pub const Cpu = struct {
                 switch (opcode & 0x00FF) {
                     0x9E => {
                         const key = self.registers[x];
-                        if (self.input_keys[key] == 0x1) {
+                        if (self.keypad.keys[key] == 0x1) {
                             self.pc += 2;
                         }
                     },
                     0xA1 => {
                         const key = self.registers[x];
-                        if (self.input_keys[key] == 0x0) {
+                        if (self.keypad.keys[key] == 0x0) {
                             self.pc += 2;
                         }
                     },
@@ -306,8 +308,8 @@ pub const Cpu = struct {
                 switch (opcode & 0x00FF) {
                     0x07 => self.registers[x] = self.delay_timer,
                     0x0A => {
-                        for (self.input_keys) |k, i| {
-                            if (k == 1) {
+                        for (self.keypad.keys) |k, i| {
+                            if (k == 0x1) {
                                 self.registers[x] = @intCast(u8, i);
                                 return;
                             }
