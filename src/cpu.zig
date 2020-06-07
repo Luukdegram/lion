@@ -32,6 +32,10 @@ pub const font_set = &[_]u8{
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 };
 
+/// Callback function that can be used to update the frame
+/// of a display, such as a GUI or Terminal UI.
+pub const UpdateFrameFn = fn ([]u1) void;
+
 /// Cpu is the 8Chip implementation, it contains the memory,
 /// opcodes and handles the cycle. Video output can be accessed
 /// directly, but is not thread-safe currently.
@@ -58,9 +62,22 @@ pub const Cpu = struct {
     /// keypad input keys
     keypad: Keypad,
     /// The pixels to write a sprite to
-    video: [width * height]u1,
+    video: Video,
     /// generates random numbers for our opcode at 0xC000
     random: std.rand.DefaultPrng,
+
+    /// The pixel buffer to write the sprites to
+    pub const Video = struct {
+        data: [width * height]u1,
+        updateFrame: ?UpdateFrameFn,
+
+        /// Calls the updateFrame function using its own data as frame
+        fn update(self: *Video) void {
+            if (self.updateFrame) |updateFrame| {
+                updateFrame(self.data[0..]);
+            }
+        }
+    };
 
     /// Currently the implementation allows to set the delay and sound timers
     /// By default, both are set to 0.
@@ -73,7 +90,7 @@ pub const Cpu = struct {
 
     /// Creates a new Cpu while setting the default fields
     /// `delay` sets the `delay_timer` field if not null, else 0.
-    pub fn init(config: Config) Cpu {
+    pub fn init(config: Config, comptime updateFn: ?UpdateFrameFn) Cpu {
         // seed for our random bytes
         const seed = @intCast(u64, std.time.milliTimestamp());
         // create our new cpu and set the program counter to 0x200
@@ -86,7 +103,10 @@ pub const Cpu = struct {
             .delay_timer = config.delay_timer,
             .sound_timer = config.sound_timer,
             .keypad = Keypad{},
-            .video = [_]u1{0} ** width ** height,
+            .video = Video{
+                .data = [_]u1{0} ** width ** height,
+                .updateFrame = updateFn,
+            },
             .random = std.rand.DefaultPrng.init(seed),
         };
 
@@ -96,6 +116,14 @@ pub const Cpu = struct {
         }
 
         return cpu;
+    }
+
+    // Starts the CPU cycle and runs the currently loaded rom
+    pub fn run(self: *Cpu) !void {
+        while (true) {
+            try self.cycle();
+            self.video.update();
+        }
     }
 
     /// Utility function that loads a ROM file's data and then loads it into the CPU's memory
@@ -152,7 +180,7 @@ pub const Cpu = struct {
             0x0000 => switch (opcode) {
                 0x00E0 => {
                     // clear the screen
-                    self.video = [_]u1{0} ** width ** height;
+                    self.video.data = [_]u1{0} ** width ** height;
                     self.pc += 2;
                 },
                 0x00EE => {
@@ -285,7 +313,7 @@ pub const Cpu = struct {
                         // LFH must be fixed-width, so coerce into u16,
                         // then truncate into u8 after bitshift
                         const sprite_pixel = sprite_byte & (@as(u16, 0x80) >> col);
-                        var screen_pixel = &self.video[(y + row) * width + (x + col)];
+                        var screen_pixel = &self.video.data[(y + row) * width + (x + col)];
 
                         // Sprite pixel is on
                         if (sprite_pixel == 0x01) {

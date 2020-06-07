@@ -1,19 +1,19 @@
 const std = @import("std");
-const display = @import("display.zig");
+const window = @import("window.zig");
+const chip8 = @import("cpu.zig");
 
-fn getTexture() [][][3]u8 {
-    var tex: [][][3]u8 = undefined;
-    tex[0][0][0] = 0;
-
-    return tex;
-}
+const test_rom = @embedFile("../roms/BC_test.ch8");
 
 pub fn main() anyerror!void {
     std.debug.warn("All your codebase are belong to us.\n", .{});
 
-    try display.init(.{
+    try window.init(.{
         .width = 800,
         .height = 600,
         .title = "Lion",
-    }, getTexture);
+    });
+
+    var cpu = chip8.Cpu.init(.{}, window.update);
+    cpu.loadBytes(test_rom);
+    try cpu.run();
 }
