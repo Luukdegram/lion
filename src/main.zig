@@ -13,6 +13,8 @@ pub fn main() anyerror!void {
         .title = "Lion",
     });
 
+    defer window.deinit();
+
     var cpu = chip8.Cpu.init(.{}, window.update);
     cpu.loadBytes(test_rom);
     try cpu.run();
