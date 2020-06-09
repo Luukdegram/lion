@@ -95,7 +95,6 @@ pub const Cpu = struct {
         const seed = @intCast(u64, std.time.milliTimestamp());
         // create our new cpu and set the program counter to 0x200
         var cpu = Cpu{
-            .memory = undefined,
             .registers = [_]u8{0} ** 16,
             .index_register = 0,
             .pc = start_address,
@@ -174,6 +173,8 @@ pub const Cpu = struct {
 
     /// Executes the given opcode
     pub fn dispatch(self: *Cpu, opcode: u16) !void {
+        std.debug.warn("Opcode: {X:0>4}\n", .{opcode});
+
         // increase program counter for each dispatch
         self.pc += 2;
         switch (opcode & 0xF000) {
@@ -181,12 +182,10 @@ pub const Cpu = struct {
                 0x00E0 => {
                     // clear the screen
                     self.video.data = [_]u1{0} ** width ** height;
-                    self.pc += 2;
                 },
                 0x00EE => {
-                    self.pc = self.stack[self.sp];
                     self.sp -= 1;
-                    self.pc += 2;
+                    self.pc = self.stack[self.sp];
                 },
                 else => return error.UnknownOpcode,
             },
@@ -199,38 +198,37 @@ pub const Cpu = struct {
             // skip the following instructions if vx and kk are equal
             0x3000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const kk = opcode & 0x00FF;
-                if (self.registers[vx] == kk) {
+                if (self.registers[vx] == @truncate(u8, opcode)) {
                     self.pc += 2;
                 }
             },
             0x4000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const kk = opcode & 0x00FF;
-                if (self.registers[vx] != kk) {
+                if (self.registers[vx] != @truncate(u8, opcode)) {
                     self.pc += 2;
                 }
             },
             0x5000 => {
                 const vx = (opcode & 0x0F00) >> 8;
                 const vy = (opcode & 0x00F0) >> 4;
-                if (self.registers[vx] == vy) {
+                if (self.registers[vx] == self.registers[vy]) {
                     self.pc += 2;
                 }
             },
             0x6000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const kk = opcode & 0x00FF;
-                self.registers[vx] = @truncate(u8, kk);
+                self.registers[vx] = @truncate(u8, opcode);
             },
             0x7000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const kk = opcode & 0x00FF;
-                self.registers[vx] += @truncate(u8, kk);
+                const kk = @truncate(u8, opcode);
+
+                var answer: u8 = undefined;
+                self.registers[vx] = if (@addWithOverflow(u8, self.registers[vx], kk, &answer)) 0 else answer;
             },
             0x8000 => {
                 const x = (opcode & 0x0F00) >> 8;
-                const y = @truncate(u8, (opcode & 0x00F0) >> 4);
+                const y = @truncate(u8, opcode) >> 4;
 
                 switch (opcode & 0x000F) {
                     0x0000 => self.registers[x] = self.registers[y],
@@ -245,7 +243,7 @@ pub const Cpu = struct {
                     0x0005 => {
                         self.registers[0xF] = if (self.registers[x] > self.registers[y]) 1 else 0;
                         // check for overflow, we keep the lowest bits so incase of
-                        // overflow, return max u8 instead of the overflow bits
+                        // overflow, return 255 instead of the overflow bits
                         var result: u8 = undefined;
                         self.registers[x] = if (@subWithOverflow(
                             u8,
@@ -261,7 +259,7 @@ pub const Cpu = struct {
                     0x0007 => {
                         self.registers[0xF] = if (self.registers[y] > self.registers[x]) 1 else 0;
                         // check for overflow, we keep the lowest bits so incase of
-                        // overflow, return max u8 instead of the overflow bits
+                        // overflow, return 255 instead of the overflow bits
                         var result: u8 = undefined;
                         self.registers[x] = if (@subWithOverflow(
                             u8,
@@ -291,8 +289,7 @@ pub const Cpu = struct {
             // set Vx to random byte AND kk
             0xC000 => {
                 const vx = (opcode & 0x0F00) >> 8;
-                const kk = opcode & 0x00FF;
-                self.registers[vx] = self.random.random.int(u8) & @truncate(u8, kk);
+                self.registers[vx] = self.random.random.int(u8) & @truncate(u8, opcode);
             },
             0xD000 => {
                 // Display n-byte sprite starting at memory location I at (Vx, Vy),
@@ -312,7 +309,7 @@ pub const Cpu = struct {
                     while (col < 8) : (col += 1) {
                         // LFH must be fixed-width, so coerce into u16,
                         // then truncate into u8 after bitshift
-                        const sprite_pixel = sprite_byte & (@as(u16, 0x80) >> col);
+                        const sprite_pixel = sprite_byte & (@intCast(u16, 0x80) >> col);
                         var screen_pixel = &self.video.data[(y + row) * width + (x + col)];
 
                         // Sprite pixel is on
@@ -379,7 +376,9 @@ pub const Cpu = struct {
                             self.registers[i] = self.memory[self.index_register + i];
                         }
                     },
-                    else => return error.UnknownOpcode,
+                    else => {
+                        return error.UnknownOpcode;
+                    },
                 }
             },
             else => return error.UnknownOpcode,

@@ -125,6 +125,12 @@ pub const Texture = struct {
             }
         }
 
+        var f: [width * height]u8 = undefined;
+
+        for (frame) |fr, in| {
+            f[in] = @intCast(u8, fr) * 255;
+        }
+
         glTexSubImage2D(
             GL_TEXTURE_2D,
             0,
@@ -132,9 +138,9 @@ pub const Texture = struct {
             0,
             width,
             height,
-            GL_RGBA,
+            GL_RED,
             GL_UNSIGNED_BYTE,
-            @ptrCast(*c_void, &self.buffer),
+            @ptrCast(*c_void, &f),
         );
 
         glBindVertexArray(self.vao);

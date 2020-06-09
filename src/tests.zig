@@ -235,7 +235,6 @@ test "All opcodes" {
     expectEqual(cpu.pc, 0x202);
 
     // Dxyn - DRW Vx, Vy, nibble
-    // TODO: Implement and test video output
     cpu = Cpu.init(.{}, testUpdateFrame);
     cpu.index_register = 0x200;
     cpu.memory[0x200] = 0x01;
