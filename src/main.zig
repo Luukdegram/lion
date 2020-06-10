@@ -2,7 +2,7 @@ const std = @import("std");
 const window = @import("window.zig");
 const chip8 = @import("cpu.zig");
 
-const test_rom = @embedFile("../roms/test_opcode.ch8");
+const test_rom = @embedFile("../roms/BC_test.ch8");
 
 pub fn main() anyerror!void {
     std.debug.warn("All your codebase are belong to us.\n", .{});

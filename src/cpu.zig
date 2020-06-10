@@ -119,6 +119,7 @@ pub const Cpu = struct {
 
     // Starts the CPU cycle and runs the currently loaded rom
     pub fn run(self: *Cpu) !void {
+        var last_time = std.time.milliTimestamp();
         while (true) {
             try self.cycle();
             self.video.update();
@@ -151,7 +152,7 @@ pub const Cpu = struct {
     /// Returns the next opcode based on the memory's byte located at program counter
     /// and program counter + 1
     pub fn fetchOpcode(self: Cpu) u16 {
-        return @shlExact(@as(u16, self.memory[self.pc]), 8) | self.memory[self.pc + 1];
+        return @shlExact(@intCast(u16, self.memory[self.pc]), 8) | self.memory[self.pc + 1];
     }
 
     /// Executes one cycle on the CPU

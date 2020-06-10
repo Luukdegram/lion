@@ -6,5 +6,6 @@ out vec2 TextureCoords;
 void main() 
 {
     gl_Position = vec4(pos, 1.0);
-    TextureCoords = vec2(pos.x, pos.y);
+    // Flip our texture to match it with chip8 video output's y axis
+    TextureCoords = vec2(pos.x, pos.y * -1);
 }

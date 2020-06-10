@@ -229,10 +229,10 @@ test "All opcodes" {
     expectEqual(cpu.pc, 0x211);
 
     // Cxkk - RND Vx, byte
-    // TODO: implement a way to inject the random position to opcode
     cpu = Cpu.init(.{}, testUpdateFrame);
     try cpu.dispatch(0xC110);
     expectEqual(cpu.pc, 0x202);
+    expect(cpu.registers[1] == 0 or cpu.registers[1] == 16);
 
     // Dxyn - DRW Vx, Vy, nibble
     cpu = Cpu.init(.{}, testUpdateFrame);

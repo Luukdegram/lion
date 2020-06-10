@@ -105,7 +105,7 @@ pub const Texture = struct {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, self.id);
 
-        // TODO: Perhaps write a more perf version of this
+        // TODO: Perhaps write a more performant version of this
         var h = @intCast(usize, height);
         var i: usize = 0;
         var offset: usize = 0;
@@ -113,9 +113,6 @@ pub const Texture = struct {
         while (i < width) : (i += 1) {
             var j: usize = 0;
             while (j < height) : (j += 1) {
-                //self.buffer[offset] = 255;
-                //self.buffer[offset + 2] = 255;
-                //self.buffer[offset + 1] = 255;
                 self.buffer[offset + 3] = @intCast(u8, frame[pixel]) * 255;
                 offset += 4;
                 pixel += 1;
