@@ -173,8 +173,6 @@ pub const Cpu = struct {
 
     /// Executes the given opcode
     pub fn dispatch(self: *Cpu, opcode: u16) !void {
-        std.debug.warn("Opcode: {X:0>4}\n", .{opcode});
-
         // increase program counter for each dispatch
         self.pc += 2;
         switch (opcode & 0xF000) {
@@ -223,12 +221,11 @@ pub const Cpu = struct {
                 const vx = (opcode & 0x0F00) >> 8;
                 const kk = @truncate(u8, opcode);
 
-                var answer: u8 = undefined;
-                self.registers[vx] = if (@addWithOverflow(u8, self.registers[vx], kk, &answer)) 0 else answer;
+                _ = (@addWithOverflow(u8, self.registers[vx], kk, &self.registers[vx]));
             },
             0x8000 => {
                 const x = (opcode & 0x0F00) >> 8;
-                const y = @truncate(u8, opcode) >> 4;
+                const y = @intCast(u8, (opcode & 0x00F0) >> 4);
 
                 switch (opcode & 0x000F) {
                     0x0000 => self.registers[x] = self.registers[y],
@@ -236,37 +233,35 @@ pub const Cpu = struct {
                     0x0002 => self.registers[x] &= self.registers[y],
                     0x0003 => self.registers[x] ^= self.registers[y],
                     0x0004 => {
-                        const sum = @as(u16, self.registers[x]) + self.registers[y];
-                        self.registers[0xF] = if (sum > 255) 1 else 0;
-                        self.registers[x] = @truncate(u8, sum);
+                        var sum: u8 = undefined;
+                        if (@addWithOverflow(u8, self.registers[x], self.registers[y], &sum)) {
+                            self.registers[0xF] = 1;
+                        } else {
+                            self.registers[0xF] = 0;
+                        }
+                        self.registers[x] = sum;
                     },
                     0x0005 => {
-                        self.registers[0xF] = if (self.registers[x] > self.registers[y]) 1 else 0;
-                        // check for overflow, we keep the lowest bits so incase of
-                        // overflow, return 255 instead of the overflow bits
-                        var result: u8 = undefined;
-                        self.registers[x] = if (@subWithOverflow(
-                            u8,
-                            self.registers[x],
-                            self.registers[y],
-                            &result,
-                        )) 255 else result;
+                        var sub: u8 = undefined;
+                        if (@subWithOverflow(u8, self.registers[x], self.registers[y], &sub)) {
+                            self.registers[0xF] = 0;
+                        } else {
+                            self.registers[0xF] = 1;
+                        }
+                        self.registers[x] = sub;
                     },
                     0x0006 => {
-                        self.registers[0xF] = (self.registers[x] & 0x1);
+                        self.registers[0xF] = self.registers[x] & 0x1;
                         self.registers[x] >>= 1;
                     },
                     0x0007 => {
-                        self.registers[0xF] = if (self.registers[y] > self.registers[x]) 1 else 0;
-                        // check for overflow, we keep the lowest bits so incase of
-                        // overflow, return 255 instead of the overflow bits
-                        var result: u8 = undefined;
-                        self.registers[x] = if (@subWithOverflow(
-                            u8,
-                            self.registers[y],
-                            self.registers[x],
-                            &result,
-                        )) 255 else result;
+                        var sub: u8 = undefined;
+                        if (@subWithOverflow(u8, self.registers[y], self.registers[x], &sub)) {
+                            self.registers[0xF] = 0;
+                        } else {
+                            self.registers[0xF] = 1;
+                        }
+                        self.registers[x] = sub;
                     },
                     0x000E => {
                         self.registers[0xF] = (self.registers[x] & 0x80) >> 7;
@@ -293,11 +288,11 @@ pub const Cpu = struct {
             },
             0xD000 => {
                 // Display n-byte sprite starting at memory location I at (Vx, Vy),
-                // set VF = collision
+                // set VF to 1 if sprite and pixel are on
 
                 // Apply wrapping if going beyond screen boundaries
-                const x = self.registers[(opcode & 0x0F00) >> 8] % width;
-                const y = self.registers[(opcode & 0x00F0) >> 4] % height;
+                const x = self.registers[(opcode & 0x0F00) >> 8];
+                const y = self.registers[(opcode & 0x00F0) >> 4];
                 const n = opcode & 0x000F;
 
                 self.registers[0xF] = 0x0;
@@ -305,20 +300,18 @@ pub const Cpu = struct {
                 while (row < n) : (row += 1) {
                     const sprite_byte: u8 = self.memory[self.index_register + row];
 
-                    var col: u4 = 0;
+                    var col: u8 = 0;
                     while (col < 8) : (col += 1) {
-                        // LFH must be fixed-width, so coerce into u16,
-                        // then truncate into u8 after bitshift
-                        const sprite_pixel = sprite_byte & (@intCast(u16, 0x80) >> col);
-                        var screen_pixel = &self.video.data[(y + row) * width + (x + col)];
+                        const sprite_pixel = sprite_byte >> @intCast(u3, (7 - col)) & 0x01;
+                        var screen_pixel = &self.video.data[((y + row) % height) * width + ((x + col) % width)];
 
                         // Sprite pixel is on
-                        if (sprite_pixel == 0x01) {
+                        if (sprite_pixel == 0x1) {
                             // screen pixel is also on
-                            if (screen_pixel.* == 0x01) {
-                                self.registers[0xF] = 0x01;
+                            if (screen_pixel.* == 0x1) {
+                                self.registers[0xF] = 0x1;
                             }
-                            screen_pixel.* ^= 0x01;
+                            screen_pixel.* ^= 0x1;
                         }
                     }
                 }
@@ -326,16 +319,16 @@ pub const Cpu = struct {
             // keypad opcodes
             0xE000 => {
                 const x = (opcode & 0x0F00) >> 8;
+                const key = self.registers[x];
+
                 switch (opcode & 0x00FF) {
                     0x9E => {
-                        const key = self.registers[x];
-                        if (self.keypad.keys[key] == 0x1) {
+                        if (self.keypad.isDown(key)) {
                             self.pc += 2;
                         }
                     },
                     0xA1 => {
-                        const key = self.registers[x];
-                        if (self.keypad.keys[key] == 0x0) {
+                        if (!self.keypad.isDown(key)) {
                             self.pc += 2;
                         }
                     },
@@ -347,34 +340,38 @@ pub const Cpu = struct {
                 switch (opcode & 0x00FF) {
                     0x07 => self.registers[x] = self.delay_timer,
                     0x0A => {
+                        self.pc -= 2;
                         for (self.keypad.keys) |k, i| {
                             if (k == 0x1) {
                                 self.registers[x] = @intCast(u8, i);
-                                return;
+                                self.pc += 2;
                             }
                         }
-                        self.pc += 2;
                     },
                     0x15 => self.delay_timer = self.registers[x],
                     0x18 => self.sound_timer = self.registers[x],
                     0x1E => self.index_register += self.registers[x],
-                    0x29 => self.index_register = self.registers[x] * 0x05,
+                    0x29 => self.index_register = self.registers[x] * 5,
                     0x33 => {
                         self.memory[self.index_register] = self.registers[x] / 100;
                         self.memory[self.index_register + 1] = (self.registers[x] / 10) % 10;
                         self.memory[self.index_register + 2] = (self.registers[x] % 100) % 10;
                     },
                     0x55 => {
-                        var i: u16 = 0;
-                        while (i <= x) : (i += 1) {
-                            self.memory[self.index_register + i] = self.registers[i];
-                        }
+                        // Copy registry data into memory
+                        std.mem.copy(
+                            u8,
+                            self.memory[self.index_register .. self.index_register + x + 1],
+                            self.registers[0 .. x + 1],
+                        );
                     },
                     0x65 => {
-                        var i: u8 = 0;
-                        while (i <= x) : (i += 1) {
-                            self.registers[i] = self.memory[self.index_register + i];
-                        }
+                        // Copy memory data into registry
+                        std.mem.copy(
+                            u8,
+                            self.registers[0 .. x + 1],
+                            self.memory[self.index_register .. self.index_register + x + 1],
+                        );
                     },
                     else => {
                         return error.UnknownOpcode;

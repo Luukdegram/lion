@@ -113,22 +113,13 @@ pub const Texture = struct {
         while (i < width) : (i += 1) {
             var j: usize = 0;
             while (j < height) : (j += 1) {
-                self.buffer[offset] = 255;
-                self.buffer[offset + 2] = 255;
-                self.buffer[offset + 1] = 255;
-                if (frame[pixel] == 0x1) {
-                    self.buffer[offset + 3] = 255;
-                }
-                self.buffer[offset + 3] = 0;
+                //self.buffer[offset] = 255;
+                //self.buffer[offset + 2] = 255;
+                //self.buffer[offset + 1] = 255;
+                self.buffer[offset + 3] = @intCast(u8, frame[pixel]) * 255;
                 offset += 4;
                 pixel += 1;
             }
-        }
-
-        var f: [width * height]u8 = undefined;
-
-        for (frame) |fr, in| {
-            f[in] = @intCast(u8, fr) * 255;
         }
 
         glTexSubImage2D(
@@ -138,9 +129,9 @@ pub const Texture = struct {
             0,
             width,
             height,
-            GL_RED,
+            GL_RGBA,
             GL_UNSIGNED_BYTE,
-            @ptrCast(*c_void, &f),
+            @ptrCast(*c_void, &self.buffer),
         );
 
         glBindVertexArray(self.vao);

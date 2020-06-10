@@ -31,4 +31,9 @@ pub const Keypad = struct {
     pub fn releaseKey(self: *Self, key: Key) void {
         self.keys[@enumToInt(key)] = 0x0;
     }
+
+    /// Returns true if the given key is pressed down
+    pub fn isDown(self: *Self, key: u8) bool {
+        return self.keys[key] == 0x1;
+    }
 };
