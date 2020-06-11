@@ -121,8 +121,16 @@ pub const Cpu = struct {
     pub fn run(self: *Cpu) !void {
         var last_time = std.time.milliTimestamp();
         while (true) {
-            try self.cycle();
-            self.video.update();
+            // timing
+            const current_time = std.time.milliTimestamp();
+            const delta = current_time - last_time;
+
+            if (delta > self.delay_timer) {
+                last_time = current_time;
+
+                try self.cycle();
+                self.video.update();
+            }
         }
     }
 

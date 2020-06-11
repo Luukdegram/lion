@@ -5,10 +5,10 @@ const fragment_shader_source = @embedFile("shaders/fragment.glsl");
 
 /// Our texture quad
 const vertices = &[_]GLfloat{
-    -1, -1, 0,
-    -1, 1,  0,
-    1,  -1, 0,
-    1,  1,  0,
+    1,  -1, 0.0, 1.0, 0.0, // bottom right
+    1,  1,  0.0, 1.0, 1.0, // top right
+    -1, -1, 0.0, 0.0, 0.0, // bottom left
+    -1, 1,  0.0, 0.0, 1.0, // top left
 };
 
 /// Texture height
@@ -85,7 +85,9 @@ pub const Texture = struct {
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glBufferData(GL_ARRAY_BUFFER, vertices.len * @sizeOf(GLfloat), @ptrCast(*const c_void, vertices), GL_STATIC_DRAW);
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * @sizeOf(GLfloat), null);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * @sizeOf(GLfloat), null);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * @sizeOf(GLfloat), @intToPtr(*c_int, 3 * @sizeOf(GLfloat)));
 
         // unbind
         glBindVertexArray(0);
@@ -105,7 +107,7 @@ pub const Texture = struct {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, self.id);
 
-        // TODO: Perhaps write a more performant version of this
+        // Perhaps write a more performant version of this
         var h = @intCast(usize, height);
         var i: usize = 0;
         var offset: usize = 0;
