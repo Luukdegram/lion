@@ -1,11 +1,20 @@
+const warn = @import("std").debug.warn;
 const window = @import("window.zig");
 const chip8 = @import("cpu.zig");
 const c = @import("c.zig");
 const Key = @import("keypad.zig").Keypad.Key;
+const Thread = @import("std").Thread;
 
 const test_rom = @embedFile("../roms/test_opcode.ch8");
 
 var cpu: chip8.Cpu = undefined;
+
+/// CpuContext is the context running on a different thread
+const CpuContext = struct {
+    cpu: *chip8.Cpu
+};
+
+var cpu_context: CpuContext = undefined;
 
 /// GLFW key input callback
 fn keyCallback(win: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
@@ -18,7 +27,14 @@ fn keyCallback(win: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, 
         },
         c.GLFW_KEY_P => {
             if (action == c.GLFW_PRESS) {
-                cpu.pauseOrRun() catch unreachable;
+                if (cpu.running()) {
+                    cpu.stop();
+                } else {
+                    _ = Thread.spawn(cpu_context, startCpu) catch {
+                        warn("Could not start the CPU. Exiting...\n", .{});
+                        window.shutdown();
+                    };
+                }
             }
         },
         c.GLFW_KEY_A => pressKeypad(action, Key.A),
@@ -65,7 +81,18 @@ pub fn run() !void {
 
     defer window.deinit();
 
-    cpu = chip8.Cpu.init(.{ .delay_timer = 0 }, window.update);
+    cpu = chip8.Cpu.init(.{}, window.update);
     cpu.loadBytes(test_rom);
-    try cpu.run();
+
+    cpu_context = CpuContext{ .cpu = &cpu };
+    _ = try Thread.spawn(cpu_context, startCpu);
+
+    window.run();
+}
+
+/// Starts the cpu on a different thread
+fn startCpu(context: CpuContext) void {
+    context.cpu.run() catch |err| {
+        warn("Error occured when running the cpu: {}\n", .{err});
+    };
 }

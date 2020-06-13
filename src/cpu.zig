@@ -122,8 +122,14 @@ pub const Cpu = struct {
 
     // Starts the CPU cycle and runs the currently loaded rom
     pub fn run(self: *Cpu) !void {
-        var last_time = std.time.milliTimestamp();
+        // set to 0 incase stop() was called
         self.should_stop.set(0);
+        var last_time = std.time.milliTimestamp();
+        // run 60 cycles per second
+        const refresh_rate = 60;
+        // frame time in milliseconds
+        const frame_time = 1000 / refresh_rate;
+
         while (self.should_stop.get() == 0) {
             // timing
             const current_time = std.time.milliTimestamp();
@@ -131,6 +137,11 @@ pub const Cpu = struct {
 
             if (delta > self.delay_timer) {
                 last_time = current_time;
+                if (delta < frame_time) {
+                    // sleep expects nano seconds so multiply by 1 mill to go from milli to nanoseconds
+                    const sleep_time: u64 = @bitCast(u64, frame_time - delta) * 1000000;
+                    std.time.sleep(sleep_time);
+                }
 
                 try self.cycle();
                 self.video.update();
@@ -143,12 +154,10 @@ pub const Cpu = struct {
         self.should_stop.set(1);
     }
 
-    pub fn pauseOrRun(self: *Cpu) !void {
-        if (self.should_stop.get() == 1) {
-            try self.run();
-        } else {
-            self.stop();
-        }
+    /// Returns true if the cpu is currently running,
+    /// note that this will also return true if the cpu was never started
+    pub fn running(self: *Cpu) bool {
+        return self.should_stop.get() == 0;
     }
 
     /// Utility function that loads a ROM file's data and then loads it into the CPU's memory
@@ -184,7 +193,7 @@ pub const Cpu = struct {
     pub fn cycle(self: *Cpu) !void {
         // get the next opcode
         const opcode = self.fetchOpcode();
-
+        std.debug.warn("0x{X:0>2}\n", .{opcode});
         // executes the opcode on the cpu
         try self.dispatch(opcode);
 

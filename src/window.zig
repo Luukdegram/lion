@@ -46,19 +46,26 @@ pub fn init(options: Options, comptime callback: var) !void {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
-/// Updates the frame once based on the given frame
+/// Keeps the window open until Shutdown is called
+pub fn run() void {
+    while (glfwWindowShouldClose(window) == GL_FALSE) {
+        var w: c_int = 0;
+        var h: c_int = 0;
+        glfwGetFramebufferSize(window, &w, &h);
+        glViewport(0, 0, w, h);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        texture.draw();
+
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
+}
+
+/// Updates the texture using the given frames
 /// Make sure init() is called before using update
 pub fn update(frame: []u1) void {
-    var w: c_int = 0;
-    var h: c_int = 0;
-    glfwGetFramebufferSize(window, &w, &h);
-    glViewport(0, 0, w, h);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    texture.draw(frame);
-
-    glfwSwapBuffers(window);
-    glfwPollEvents();
+    texture.update(frame);
 }
 
 /// Destroys Opengl buffers and the window

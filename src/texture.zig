@@ -101,12 +101,8 @@ pub const Texture = struct {
         };
     }
 
-    /// Renders the quad texture
-    pub fn draw(self: *Texture, frame: []u1) void {
-        glUseProgram(self.shader_program);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, self.id);
-
+    /// Updates the texture based on the pixels of the given frame
+    pub fn update(self: *Texture, frame: []u1) void {
         // Perhaps write a more performant version of this
         var h = @intCast(usize, height);
         var i: usize = 0;
@@ -120,6 +116,13 @@ pub const Texture = struct {
                 pixel += 1;
             }
         }
+    }
+
+    /// Renders the quad texture
+    pub fn draw(self: *Texture) void {
+        glUseProgram(self.shader_program);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, self.id);
 
         glTexSubImage2D(
             GL_TEXTURE_2D,
