@@ -2,21 +2,21 @@ pub const Keypad = struct {
     const Self = @This();
 
     pub const Key = enum {
-        One = 0x0,
-        Two = 0x1,
-        Three = 0x2,
-        C = 0x3,
+        Zero = 0x0,
+        One = 0x1,
+        Two = 0x2,
+        Three = 0x3,
         Four = 0x4,
         Five = 0x5,
         Six = 0x6,
-        D = 0x7,
-        Seven = 0x8,
-        Eight = 0x9,
-        Nine = 0xA,
-        E = 0xB,
-        A = 0xC,
-        Zero = 0xD,
-        B = 0xE,
+        Seven = 0x7,
+        Eight = 0x8,
+        Nine = 0x9,
+        A = 0xA,
+        B = 0xB,
+        C = 0xC,
+        D = 0xD,
+        E = 0xE,
         F = 0xF,
     };
 

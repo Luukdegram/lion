@@ -65,6 +65,8 @@ pub const Cpu = struct {
     video: Video,
     /// generates random numbers for our opcode at 0xC000
     random: std.rand.DefaultPrng,
+    /// should stop is an atomic boolean used to shutdown the Cpu
+    should_stop: std.atomic.Int(u1),
 
     /// The pixel buffer to write the sprites to
     pub const Video = struct {
@@ -107,6 +109,7 @@ pub const Cpu = struct {
                 .updateFrame = updateFn,
             },
             .random = std.rand.DefaultPrng.init(seed),
+            .should_stop = std.atomic.Int(u1).init(0),
         };
 
         // load the font set into cpu's memory
@@ -120,7 +123,8 @@ pub const Cpu = struct {
     // Starts the CPU cycle and runs the currently loaded rom
     pub fn run(self: *Cpu) !void {
         var last_time = std.time.milliTimestamp();
-        while (true) {
+        self.should_stop.set(0);
+        while (self.should_stop.get() == 0) {
             // timing
             const current_time = std.time.milliTimestamp();
             const delta = current_time - last_time;
@@ -131,6 +135,19 @@ pub const Cpu = struct {
                 try self.cycle();
                 self.video.update();
             }
+        }
+    }
+
+    /// Stops the Cpu
+    pub fn stop(self: *Cpu) void {
+        self.should_stop.set(1);
+    }
+
+    pub fn pauseOrRun(self: *Cpu) !void {
+        if (self.should_stop.get() == 1) {
+            try self.run();
+        } else {
+            self.stop();
         }
     }
 

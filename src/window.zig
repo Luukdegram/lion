@@ -19,7 +19,7 @@ var texture: Texture = undefined;
 
 /// Creates a new window, can fail initialization
 /// Currently uses opengl version 3.3 for most compatibility
-pub fn init(options: Options) !void {
+pub fn init(options: Options, comptime callback: var) !void {
     if (glfwInit() == 0) {
         return error.FailedToInitialize;
     }
@@ -36,6 +36,8 @@ pub fn init(options: Options) !void {
     window = glfwCreateWindow(options.width, options.height, options.title, null, null) orelse return error.WindowCreationFailed;
     glfwMakeContextCurrent(window);
     errdefer glfwDestroyWindow(window);
+
+    _ = glfwSetKeyCallback(window, callback);
 
     texture = try Texture.init();
 
@@ -63,4 +65,9 @@ pub fn update(frame: []u1) void {
 pub fn deinit() void {
     texture.deinit();
     glfwDestroyWindow(window);
+}
+
+/// Shuts down the GLFW window
+pub fn shutdown() void {
+    glfwSetWindowShouldClose(window, GL_TRUE);
 }
