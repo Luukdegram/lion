@@ -67,6 +67,8 @@ pub const Cpu = struct {
     random: std.rand.DefaultPrng,
     /// should stop is an atomic boolean used to shutdown the Cpu
     should_stop: std.atomic.Int(u1),
+    /// beepFn is the callback function that is triggered when emitting a sound
+    beepFn: ?fn () void,
 
     /// The pixel buffer to write the sprites to
     pub const Video = struct {
@@ -81,13 +83,16 @@ pub const Cpu = struct {
         }
     };
 
-    /// Currently the implementation allows to set the delay and sound timers
+    /// Currently the implementation allows to set the delay and sound timers.
     /// By default, both are set to 0.
     pub const Config = struct {
         /// Delayer timer is decremented by 1 in each cpu cycle
         delay_timer: u8 = 0,
         /// Sound timer which is decremented by 1 in each cpu cycle
         sound_timer: u8 = 0,
+        /// Callback function that can be set to trigger sound effects each cycle
+        /// default is null
+        audio_callback: ?fn () void = null,
     };
 
     /// Creates a new Cpu while setting the default fields
@@ -110,6 +115,7 @@ pub const Cpu = struct {
             },
             .random = std.rand.DefaultPrng.init(seed),
             .should_stop = std.atomic.Int(u1).init(0),
+            .beepFn = config.audio_callback,
         };
 
         // load the font set into cpu's memory
@@ -118,6 +124,29 @@ pub const Cpu = struct {
         }
 
         return cpu;
+    }
+
+    /// Resets the Cpu to all zero values
+    /// This means that to the ROM must be loaded again
+    /// to be able to start it.
+    /// If the CPU was initialized with timers,
+    /// they must be set explicitly on the cpu object
+    pub fn reset(self: *Cpu) void {
+        // first stop the cpu for race conditions
+        self.stop();
+        self.registers = [_]u8{0} ** 16;
+        self.index_register = 0;
+        self.pc = start_address;
+        self.video.data = [_]u1{0} ** width ** height;
+        self.should_stop = std.atomic.Int(u1).init(0);
+        self.memory = [_]u8{0} ** 4096;
+        self.stack = [_]u16{0} ** 16;
+        self.sp = 0;
+
+        // load the font set into cpu's memory
+        for (font_set) |f, i| {
+            self.memory[font_start_address + i] = f;
+        }
     }
 
     // Starts the CPU cycle and runs the currently loaded rom
@@ -193,7 +222,7 @@ pub const Cpu = struct {
     pub fn cycle(self: *Cpu) !void {
         // get the next opcode
         const opcode = self.fetchOpcode();
-        std.debug.warn("0x{X:0>2}\n", .{opcode});
+
         // executes the opcode on the cpu
         try self.dispatch(opcode);
 
@@ -203,6 +232,10 @@ pub const Cpu = struct {
 
         if (self.sound_timer > 0) {
             self.sound_timer -= 1;
+
+            if (self.beepFn) |playSound| {
+                playSound();
+            }
         }
     }
 

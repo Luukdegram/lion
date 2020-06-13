@@ -37,6 +37,11 @@ fn keyCallback(win: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, 
                 }
             }
         },
+        c.GLFW_KEY_R => {
+            if (action == c.GLFW_PRESS) {
+                cpu.reset();
+            }
+        },
         c.GLFW_KEY_A => pressKeypad(action, Key.A),
         c.GLFW_KEY_B => pressKeypad(action, Key.B),
         c.GLFW_KEY_C => pressKeypad(action, Key.C),
@@ -93,6 +98,6 @@ pub fn run() !void {
 /// Starts the cpu on a different thread
 fn startCpu(context: CpuContext) void {
     context.cpu.run() catch |err| {
-        warn("Error occured when running the cpu: {}\n", .{err});
+        warn("Error occured while running the cpu: {}\n", .{err});
     };
 }
