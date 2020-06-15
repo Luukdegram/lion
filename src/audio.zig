@@ -1,5 +1,4 @@
 usingnamespace @import("c.zig");
-const std = @import("std");
 
 var initialized: bool = false;
 var muted: bool = false;
