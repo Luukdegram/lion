@@ -4,8 +4,9 @@ const chip8 = @import("cpu.zig");
 const c = @import("c.zig");
 const Key = @import("keypad.zig").Keypad.Key;
 const Thread = @import("std").Thread;
+const audio = @import("audio.zig");
 
-const test_rom = @embedFile("../roms/test_opcode.ch8");
+const test_rom = @embedFile("../assets/roms/test_opcode.ch8");
 
 var cpu: chip8.Cpu = undefined;
 
@@ -60,7 +61,7 @@ fn keyCallback(win: ?*c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, 
         c.GLFW_KEY_0 => pressKeypad(action, Key.Zero),
         c.GLFW_KEY_M => {
             if (action == c.GLFW_PRESS) {
-                @import("std").debug.warn("Implement Mute after we implement sound\n", .{});
+                audio.muteOrUnmute();
             }
         },
         else => {},
@@ -78,6 +79,12 @@ fn pressKeypad(action: c_int, key: Key) void {
 
 /// Starts up the program
 pub fn run() !void {
+    audio.init("assets/sound/8bitgame10.wav", 1024 * 100) catch {
+        warn("Could not open the audio file, continuing without sound\n", .{});
+    };
+
+    defer audio.deinit();
+
     try window.init(.{
         .width = 1200,
         .height = 600,
@@ -86,7 +93,7 @@ pub fn run() !void {
 
     defer window.deinit();
 
-    cpu = chip8.Cpu.init(.{}, window.update);
+    cpu = chip8.Cpu.init(.{ .audio_callback = audio.play, .sound_timer = 5 }, window.update);
     cpu.loadBytes(test_rom);
 
     cpu_context = CpuContext{ .cpu = &cpu };
