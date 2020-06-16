@@ -1,4 +1,4 @@
-# Lion ![Lion logo](https://github.com/Luukdegram/lion/tree/master/assets/zero_lion.png "Lion Chip-8 Emulator") #
+# Lion ![Lion logo](https://github.com/Luukdegram/lion/blob/master/assets/zero_lion.png "Lion Chip-8 Emulator") #
 
 Lion is a CHIP-8 emulator written in [Zig](https://ziglang.org). It uses OpenGL with GLFW for rendering and [OpenAL](https://www.openal.org/) for audio support.
 The keypad uses the original keypad and can currently not be customized. Meaning the following keys are available:
