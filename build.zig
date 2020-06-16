@@ -12,8 +12,8 @@ pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("lion", "src/main.zig");
-    exe.addCSourceFile("lib/dr_wav.c", &[_][]const u8{"-std=c99"});
-    exe.addIncludeDir("lib");
+    exe.addCSourceFile("thirdparty/dr_wav.c", &[_][]const u8{"-std=c99"});
+    exe.addIncludeDir("thirdparty");
     exe.linkSystemLibrary("epoxy");
     exe.linkSystemLibrary("openal");
     exe.linkSystemLibrary("glfw");
