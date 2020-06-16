@@ -1,4 +1,5 @@
 const std = @import("std");
+const Mutex = std.Mutex;
 
 const Keypad = @import("keypad.zig").Keypad;
 
@@ -93,11 +94,14 @@ pub const Cpu = struct {
         /// Callback function that can be set to trigger sound effects each cycle
         /// default is null
         audio_callback: ?fn () void = null,
+        /// Callback function that passes the current video frame
+        /// This function is triggered when a draw opcode is executed
+        video_callback: ?UpdateFrameFn = null,
     };
 
     /// Creates a new Cpu while setting the default fields
     /// `delay` sets the `delay_timer` field if not null, else 0.
-    pub fn init(config: Config, comptime updateFn: ?UpdateFrameFn) Cpu {
+    pub fn init(config: Config) Cpu {
         // seed for our random bytes
         const seed = @intCast(u64, std.time.milliTimestamp());
         // create our new cpu and set the program counter to 0x200
@@ -108,10 +112,12 @@ pub const Cpu = struct {
             .stack = [_]u16{0} ** 16,
             .delay_timer = config.delay_timer,
             .sound_timer = config.sound_timer,
-            .keypad = Keypad{},
+            .keypad = Keypad{
+                .mutex = Mutex.init(),
+            },
             .video = Video{
                 .data = [_]u1{0} ** width ** height,
-                .updateFrame = updateFn,
+                .updateFrame = config.video_callback,
             },
             .random = std.rand.DefaultPrng.init(seed),
             .should_stop = std.atomic.Int(u1).init(0),
@@ -132,7 +138,8 @@ pub const Cpu = struct {
     /// If the CPU was initialized with timers,
     /// they must be set explicitly on the cpu object
     pub fn reset(self: *Cpu) void {
-        // first stop the cpu for race conditions
+        // first stop the cpu
+        // will most likely still receive an UnknownOp error
         self.stop();
         self.registers = [_]u8{0} ** 16;
         self.index_register = 0;
@@ -147,6 +154,10 @@ pub const Cpu = struct {
         for (font_set) |f, i| {
             self.memory[font_start_address + i] = f;
         }
+
+        // Call update so listener can update frame buffer
+        // with empty data and clear its screen for example.
+        self.video.update();
     }
 
     // Starts the CPU cycle and runs the currently loaded rom
@@ -173,7 +184,6 @@ pub const Cpu = struct {
                 }
 
                 try self.cycle();
-                self.video.update();
             }
         }
     }
@@ -383,6 +393,7 @@ pub const Cpu = struct {
                         }
                     }
                 }
+                self.video.update();
             },
             // keypad opcodes
             0xE000 => {

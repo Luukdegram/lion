@@ -1,4 +1,5 @@
 usingnamespace @import("c.zig");
+const Mutex = @import("std").Mutex;
 
 const vertex_shader_source = @embedFile("shaders/vertex.glsl");
 const fragment_shader_source = @embedFile("shaders/fragment.glsl");
@@ -31,6 +32,7 @@ pub const Texture = struct {
     /// texture pixel bytes in RGBA format
     /// The buffer is initialy filled by zeroes (making it transparant)
     buffer: [height * width * 4]u8 = [_]u8{255} ** width ** height ** 4,
+    mutex: Mutex,
 
     /// Creates a new Texture using the given width and height
     pub fn init() !Texture {
@@ -98,11 +100,15 @@ pub const Texture = struct {
             .vbo = vbo,
             .shader_program = program_id,
             .id = tex_id,
+            .mutex = Mutex.init(),
         };
     }
 
     /// Updates the texture based on the pixels of the given frame
     pub fn update(self: *Texture, frame: []u1) void {
+        var lock = self.mutex.acquire();
+        defer lock.release();
+
         // Perhaps write a more performant version of this
         var h = @intCast(usize, height);
         var i: usize = 0;
@@ -145,6 +151,8 @@ pub const Texture = struct {
         glDeleteVertexArrays(1, &self.vao);
         glDeleteBuffers(1, &self.vbo);
         glDeleteShader(self.shader_program);
+        self.mutex.deinit();
+        self.* = undefined;
     }
 };
 

@@ -1,3 +1,5 @@
+const Mutex = @import("std").Mutex;
+
 pub const Keypad = struct {
     const Self = @This();
 
@@ -21,19 +23,26 @@ pub const Keypad = struct {
     };
 
     keys: [16]u1 = [_]u1{0} ** 16,
+    mutex: Mutex,
 
     /// Sets the value of the selected key to 0x1
     pub fn pressKey(self: *Self, key: Key) void {
+        var lock = self.mutex.acquire();
         self.keys[@enumToInt(key)] = 0x1;
+        lock.release();
     }
 
     /// Sets the value of the selected key to 0x0
     pub fn releaseKey(self: *Self, key: Key) void {
+        var lock = self.mutex.acquire();
         self.keys[@enumToInt(key)] = 0x0;
+        lock.release();
     }
 
     /// Returns true if the given key is pressed down
     pub fn isDown(self: *Self, key: u8) bool {
+        var lock = self.mutex.acquire();
+        defer lock.release();
         return self.keys[key] == 0x1;
     }
 };

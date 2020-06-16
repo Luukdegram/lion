@@ -93,7 +93,11 @@ pub fn run() !void {
 
     defer window.deinit();
 
-    cpu = chip8.Cpu.init(.{ .audio_callback = audio.play, .sound_timer = 5 }, window.update);
+    cpu = chip8.Cpu.init(.{
+        .audio_callback = audio.play,
+        .sound_timer = 5,
+        .video_callback = window.update,
+    });
     cpu.loadBytes(test_rom);
 
     cpu_context = CpuContext{ .cpu = &cpu };
