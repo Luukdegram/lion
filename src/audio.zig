@@ -53,7 +53,7 @@ pub fn init(file_name: [*c]const u8, comptime buffer_size: comptime_int) !void {
 
 /// Plays the audio file provided with the `init` function.
 pub fn play() void {
-    if (!initialized) {
+    if (!initialized or muted) {
         return;
     }
 

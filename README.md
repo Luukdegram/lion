@@ -16,7 +16,23 @@ It also supports the following keys:
 - P: Pauses the cpu
 - M: Mutes the audio
 
-## Dependencies ##
+## Running rom's ##
+
+To run the example rom you can use
+```bash
+> zig build run
+````
+
+To use your own rom:
+```bash
+> zig build
+> ./zig-cache/bin/lion <path_to_rom>
+```
+
+Currently I've only been testing on Linux.
+Adding support to Windows/MacOS should be fairly simple by modifying the build.zig file (as long as MacOS still supports OpenGL).
+
+### Dependencies ###
 
 * [Zig](https://ziglang.org) (master branch)
 * [Epoxy](https://github.com/anholt/libepoxy)
