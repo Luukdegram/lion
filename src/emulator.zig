@@ -1,4 +1,5 @@
-const warn = @import("std").debug.warn;
+const std = @import("std");
+const warn = std.debug.warn;
 const window = @import("window.zig");
 const chip8 = @import("cpu.zig");
 const c = @import("c.zig");
@@ -79,6 +80,13 @@ fn pressKeypad(action: c_int, key: Key) void {
 
 /// Starts up the program
 pub fn run() !void {
+    var allocator = std.heap.page_allocator;
+    const file_path = parseArgumentsToFilePath(allocator) catch {
+        warn("Missing filepath argument for ROM\n", .{});
+        return;
+    };
+    defer allocator.free(file_path);
+
     audio.init("assets/sound/8bitgame10.wav", 1024 * 100) catch {
         warn("Could not open the audio file, continuing without sound\n", .{});
     };
@@ -95,10 +103,11 @@ pub fn run() !void {
 
     cpu = chip8.Cpu.init(.{
         .audio_callback = audio.play,
-        .sound_timer = 5,
+        .sound_timer = 1,
         .video_callback = window.update,
     });
-    cpu.loadBytes(test_rom);
+    var rom_bytes = try cpu.loadRom(allocator, file_path);
+    defer allocator.free(rom_bytes);
 
     cpu_context = CpuContext{ .cpu = &cpu };
     _ = try Thread.spawn(cpu_context, startCpu);
@@ -111,4 +120,15 @@ fn startCpu(context: CpuContext) void {
     context.cpu.run() catch |err| {
         warn("Error occured while running the cpu: {}\n", .{err});
     };
+}
+
+// parses the given arguments to the executable,
+// returns MissingArgument if no argument is given for the ROM file path.
+fn parseArgumentsToFilePath(allocator: *std.mem.Allocator) ![]const u8 {
+    var args = std.process.args();
+    // skip first argument
+    const exe = try args.next(allocator) orelse unreachable;
+    allocator.free(exe);
+
+    return args.next(allocator) orelse return error.MissingArgument;
 }

@@ -17,14 +17,15 @@ pub fn build(b: *Builder) void {
     exe.linkSystemLibrary("epoxy");
     exe.linkSystemLibrary("openal");
     exe.linkSystemLibrary("glfw");
-    exe.linkSystemLibrary("c");
+    exe.linkLibC();
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
 
     const run_cmd = exe.run();
+    run_cmd.addArg("assets/roms/test_opcode.ch8");
     run_cmd.step.dependOn(b.getInstallStep());
 
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run", "Run the test rom");
     run_step.dependOn(&run_cmd.step);
 }
