@@ -19,7 +19,7 @@ var texture: Texture = undefined;
 
 /// Creates a new window, can fail initialization
 /// Currently uses opengl version 3.3 for most compatibility
-pub fn init(options: Options, comptime callback: var) !void {
+pub fn init(options: Options, comptime callback: anytype) !void {
     if (glfwInit() == 0) {
         return error.FailedToInitialize;
     }
